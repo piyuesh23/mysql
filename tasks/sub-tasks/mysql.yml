@@ -1,0 +1,37 @@
+- name: MySQL | Install MySQL
+  apt: pkg={{ item }} state=installed
+  with_items:
+    - mysql-common
+    - mysql-server
+    - python-mysqldb
+
+- name: Copy .my.cnf file with root password credentials.
+  template:
+    src: templates/root-my.cnf.j2
+    dest: "/etc/mysql/my.cnf"
+    owner: root
+    group: root
+    mode: 0600
+
+- name: MySQL | Start mysql-server
+  command: "service mysql start"
+
+- name: Disallow root login & ceate new user with full access remotely
+  command: 'mysql -NBe "{{ item }}"'
+  with_items:
+    - DELETE FROM mysql.user WHERE User='{{ mysql_root_username }}' AND Host NOT IN ('localhost', '127.0.0.1', '::1')
+    - CREATE USER '{{ mysql_admin_username }}'@'localhost' IDENTIFIED BY '{{ mysql_admin_password }}';
+    - GRANT ALL PRIVILEGES ON *.* TO '{{ mysql_admin_username }}'@'localhost' WITH GRANT OPTION;
+    - CREATE USER '{{ mysql_admin_username }}'@'%' IDENTIFIED BY '{{ mysql_admin_password }}';
+    - GRANT ALL PRIVILEGES ON *.* TO '{{ mysql_admin_username }}'@'%' WITH GRANT OPTION;
+    - FLUSH PRIVILEGES;
+
+- name: Get list of hosts for the root user.
+  command: mysql -NBe "SELECT Host FROM mysql.user WHERE User = '{{ mysql_root_username }}' ORDER BY (Host='localhost') ASC"
+  register: mysql_root_hosts
+
+- name: Update MySQL root password for localhost root account (5.7.x).
+  shell: >
+    mysql -u root -NBe
+    'SET PASSWORD FOR "{{ mysql_root_username }}"@"{{ item }}" = PASSWORD("{{ mysql_root_password }}");'
+  with_items: "{{ mysql_root_hosts.stdout_lines|default([]) }}"

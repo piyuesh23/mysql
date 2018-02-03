@@ -2,4 +2,4 @@
 - hosts: localhost
 
   roles:
-    - role_under_test
+    - test_role
